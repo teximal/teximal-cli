@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teximal"
+version = "1.0.0"
+description = "Run, serve and evaluate Teximal's models, starting with Fort, the calibrated decision model"
+readme = "README.md"
+license = "Apache-2.0"
+authors = [{ name = "Teximal" }]
+requires-python = ">=3.10"
+# MLX on Apple silicon; PyTorch (through transformers) everywhere else
+dependencies = [
+    "huggingface_hub>=1.0",
+    "mlx>=0.32; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "mlx-lm>=0.31; sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "torch>=2.6; sys_platform != 'darwin' or platform_machine != 'arm64'",
+    "transformers>=5.17; sys_platform != 'darwin' or platform_machine != 'arm64'",
+]
+keywords = ["classification", "calibration", "decisions", "llm", "mlx", "pytorch"]
+
+[project.optional-dependencies]
+torch = ["torch>=2.6", "transformers>=5.17"]          # the PyTorch backend on Apple silicon too
+test = ["pytest"]
+
+[project.urls]
+Homepage = "https://github.com/teximal/teximal-cli"
+Source = "https://github.com/teximal/teximal-cli"
+Models = "https://huggingface.co/teximal"
+
+[project.scripts]
+teximal = "teximal.cli:main"
+
+[tool.setuptools]
+packages = ["teximal", "teximal.models", "teximal.models.fort"]
