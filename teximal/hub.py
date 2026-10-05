@@ -21,12 +21,31 @@ def default_backend():
     return "torch"
 
 
+def repo_id(model):
+    return model if "/" in model else f"teximal/{model}"
+
+
+def complete(path):
+    """Every weight file the folder lists is there (a download stopped halfway leaves some out)."""
+    index = os.path.join(path, "model.safetensors.index.json")
+    files = set(json.load(open(index))["weight_map"].values()) if os.path.exists(index) else {"model.safetensors"}
+    return os.path.exists(os.path.join(path, "teximal.json")) and all(os.path.exists(os.path.join(path, f)) for f in files)
+
+
 def resolve(model):
-    """A local folder, or a repo id ("teximal/fort-1-0.8b", or just "fort-1-0.8b"), as a local path."""
+    """A local folder, or a repo id ("teximal/fort-1-0.8b", or just "fort-1-0.8b"), as a local path: the cached
+    copy when it is complete (no network, so it works offline), else downloaded. `pull` updates a cached copy."""
     if os.path.isdir(model):
         return model
     from huggingface_hub import snapshot_download
-    return snapshot_download(model if "/" in model else f"teximal/{model}")
+    from huggingface_hub.errors import LocalEntryNotFoundError
+    try:
+        path = snapshot_download(repo_id(model), local_files_only=True)
+        if complete(path):
+            return path
+    except LocalEntryNotFoundError:
+        pass
+    return snapshot_download(repo_id(model))
 
 
 def config(path):
@@ -50,7 +69,11 @@ def load(model, **kwargs):
 
 
 def pull(model):
-    return resolve(model)
+    """Download a model, or bring the cached copy up to date."""
+    if os.path.isdir(model):
+        return model
+    from huggingface_hub import snapshot_download
+    return snapshot_download(repo_id(model))
 
 
 def cached():

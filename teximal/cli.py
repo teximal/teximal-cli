@@ -12,9 +12,9 @@ A task file is {"question": "...", "options": {"billing": "invoices, payments, r
 option names). Model names without a slash are teximal/<name>; a local folder works too. run, serve and eval take
 --backend mlx|torch (default: MLX on Apple silicon, PyTorch elsewhere), and --device and --dtype for PyTorch.
 """
-import argparse, json, sys
+import argparse, json, os, sys
 
-from .hub import cached, load, pull
+from .hub import cached, load, pull, resolve
 
 
 def task_spec(args, labels=None):
@@ -44,8 +44,16 @@ def runtime(args):
     return dict(backend=args.backend, device=args.device, dtype=args.dtype)
 
 
+def open_model(args, temperature):
+    """Downloaded first if it has to be (with progress bars), then loaded quietly: answers on stdout, nothing else."""
+    path = resolve(args.model)
+    from huggingface_hub.utils import disable_progress_bars
+    disable_progress_bars()                     # transformers draws its weight-loading bar with these
+    return load(path, temperature=temperature, **runtime(args))
+
+
 def cmd_run(args):
-    model = load(args.model, temperature=args.temperature, **runtime(args))
+    model = open_model(args, args.temperature)
     options, question = task_spec(args)
     task = model.task(options, question)
     texts = [args.text] if args.text and args.text != "-" else [l.rstrip("\n") for l in sys.stdin if l.strip()]
@@ -60,14 +68,14 @@ def cmd_run(args):
 
 def cmd_serve(args):
     from .serve import serve
-    serve(load(args.model, temperature=args.temperature, **runtime(args)), args.host, args.port)
+    serve(open_model(args, args.temperature), args.host, args.port)
 
 
 def cmd_eval(args):
     from .evaluate import evaluate, read, report, save
     rows = read(args.data, args.text_column, args.label_column)
     options, question = task_spec(args, [g for _, g in rows])
-    out = evaluate(load(args.model, temperature=1.0, **runtime(args)), rows, options, question)
+    out = evaluate(open_model(args, 1.0), rows, options, question)
     print(report(out))
     if args.save:
         save(out, args.save)
@@ -114,6 +122,7 @@ def main():
     add_runtime(p)
     p.set_defaults(fn=cmd_serve)
     args = ap.parse_args()
+    os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")     # no library notes on stderr (kernel hints: README)
     from huggingface_hub.errors import HfHubHTTPError
     try:
         args.fn(args)
