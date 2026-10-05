@@ -69,3 +69,18 @@ def test_fast_convolutions_match_transformers():
     from teximal.models.fort.engine_torch import _fast_convs
     _fast_convs()                    # patches only when its probe matches transformers' own functions
     assert getattr(Q.causal_conv1d_fn, "teximal", False) and getattr(Q.causal_conv1d_update, "teximal", False)
+
+
+def test_cache_states_of_any_layout():
+    mx = pytest.importorskip("mlx.core")
+    from teximal.models.fort.engine import _copy, _repeat
+    a = mx.ones((1, 2, 3))
+    for st in ([a, None], (a, a), ([a, a], None, None), (a, a, 7)):     # mlx-lm 0.31, then 0.32 (offsets, Nones)
+        c, r = _copy(st), _repeat(st, 4)
+        assert type(c) is type(st) and type(r) is type(st)
+        flat = lambda s: [x for y in s for x in (y if isinstance(y, list) else [y])]
+        for x, y, z in zip(flat(st), flat(c), flat(r)):
+            if isinstance(x, mx.array):
+                assert y.shape == x.shape and z.shape == (4,) + x.shape[1:]
+            else:
+                assert x == y == z

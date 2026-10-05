@@ -94,7 +94,11 @@ class Fort:
             from .engine import Engine
             self.engine = Engine(path, order == "question_first")
         elif self.backend == "torch":
-            from .engine_torch import Engine
+            try:
+                from .engine_torch import Engine
+            except ImportError as e:            # Apple silicon installs MLX only
+                raise ValueError(f"the PyTorch backend needs torch and transformers ({e}): "
+                                 "pip install 'teximal[torch]'") from e
             self.engine = Engine(path, order == "question_first", device=device, dtype=dtype)
         else:
             raise ValueError(f"backend {self.backend!r}: mlx or torch")

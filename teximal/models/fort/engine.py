@@ -13,11 +13,21 @@ from .prompts import Prompts
 
 
 def _copy(st):
-    if isinstance(st, list):
-        return [None if a is None else mx.array(a) for a in st]
-    if isinstance(st, tuple):
-        return tuple(mx.array(a) for a in st)
-    return mx.array(st)
+    """A copy of a cache's state, whatever its nesting (mlx-lm 0.32 keeps offsets and Nones beside the arrays)."""
+    if isinstance(st, mx.array):
+        return mx.array(st)
+    if isinstance(st, (list, tuple)):
+        return type(st)(_copy(a) for a in st)
+    return st
+
+
+def _repeat(st, n):
+    """A cache's state for n texts side by side: every array repeated along the batch axis."""
+    if isinstance(st, mx.array):
+        return mx.repeat(st, n, axis=0)
+    if isinstance(st, (list, tuple)):
+        return type(st)(_repeat(a, n) for a in st)
+    return st
 
 
 def snapshot(cache):
@@ -118,8 +128,7 @@ class Engine(Prompts):
             cache = make_prompt_cache(self.model)
             if pre:
                 for c, (st, _) in zip(cache, snap):
-                    c.state = (tuple(mx.repeat(a, B, axis=0) for a in st) if isinstance(st, tuple)
-                               else [None if a is None else mx.repeat(a, B, axis=0) for a in st])
+                    c.state = _repeat(st, B)
             h = body(mx.array([s + [0] * (L - len(s)) for s in seqs]), cache=cache)
             h = h[mx.arange(B), mx.array([len(s) - 1 for s in seqs])]
             p = mx.softmax(letters(h).astype(mx.float32) / temperature, axis=-1)
